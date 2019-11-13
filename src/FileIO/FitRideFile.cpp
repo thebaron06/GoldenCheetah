@@ -111,6 +111,7 @@ struct FitFileReaderState
 {
     QFile &file;
     QStringList &errors;
+    QList<RideFile*> *rideFiles;
     RideFile *rideFile;
     time_t start_time;
     time_t last_time;
@@ -136,6 +137,7 @@ struct FitFileReaderState
     int last_msg_type;
     double frac_time; // to carry sub-second length time in pool swimming
     double last_altitude; // to avoid problems when records lacks altitude
+    int transission_nr;
     QVariant isGarminSmartRecording;
     QVariant GarminHWM;
     XDataSeries *weatherXdata;
@@ -147,12 +149,12 @@ struct FitFileReaderState
     QMap<int, QString> deviceInfos;
     QList<QString> dataInfos;
 
-    FitFileReaderState(QFile &file, QStringList &errors) :
-        file(file), errors(errors), rideFile(NULL), start_time(0),
+    FitFileReaderState(QFile &file, QStringList &errors, QList<RideFile*> * rides) :
+        file(file), errors(errors), rideFiles(rides), rideFile(NULL), start_time(0),
         last_time(0), last_distance(0.00f), interval(0), calibration(0),
         devices(0), stopped(true), isLapSwim(false), pool_length(0.0),
         last_event_type(-1), last_event(-1), last_msg_type(-1), frac_time(0.0),
-        last_altitude(0.0)
+        last_altitude(0.0), transission_nr(0)
     {}
 
     struct TruncatedRead {};
@@ -818,6 +820,7 @@ struct FitFileReaderState
                             break;
                         case 3: // transition:
                             rideFile->setTag("Sport","Transition");
+                            transission_nr++;
                             break;
                         case 4: // running:
                             rideFile->setTag("Sport","Fitness equipment");
@@ -1071,7 +1074,20 @@ struct FitFileReaderState
                 printf("decodeSession  field %d: %d bytes, num %d, type %d\n", i, field.size, field.num, field.type );
             }
         }
-	rideFile->setTag("Workout Code",WorkOutCode);
+        rideFile->setTag("Workout Code",WorkOutCode);
+        if (rideFiles) {
+            auto devType = rideFile->deviceType();
+            QFileInfo fileInfo(file.fileName());
+            QString basefilename(fileInfo.fileName());
+            rideFile->setTag("Notes", QString("Base file: %1").arg(basefilename));
+            if (rideFile->getTag("Sport", "").toLower() == "transition" ) {
+                rideFile->setTag("Notes", QString("Base file: %1\nTransission %2").arg(basefilename, QString::number(transission_nr)));
+            }
+            rideFiles->append(rideFile);
+            rideFile = new RideFile;
+            reset_ride_file_vars();
+            rideFile->setDeviceType(devType);
+        }
     }
 
     void decodeDeviceInfo(const FitDefinition &def, int,
@@ -3023,6 +3039,29 @@ struct FitFileReaderState
         return count;
     }
 
+    void reset_ride_file_vars() {
+        if (!rideFile) {
+            return;
+        }
+
+        rideFile->setDeviceType("Garmin FIT");
+        rideFile->setFileFormat("Flexible and Interoperable Data Transfer (FIT)");
+        rideFile->setRecIntSecs(1.0); // this is a terrible assumption!
+
+        start_time = 0;
+        last_time = 0;
+        last_distance = 0;
+        interval = 0;
+        calibration = 0;
+        devices = 0;
+        stopped = true;
+        last_event_type = -1;
+        last_event = -1;
+        last_msg_type = -1;
+        frac_time = 0;
+        last_altitude = 0;
+    }
+
     RideFile * run() {
 
         // get the Smart Recording parameters
@@ -3213,10 +3252,11 @@ struct FitFileReaderState
     }
 };
 
-RideFile *FitFileReader::openRideFile(QFile &file, QStringList &errors, QList<RideFile*>*) const
+RideFile *FitFileReader::openRideFile(QFile &file, QStringList &errors, QList<RideFile*> *rides) const
 {
-    QSharedPointer<FitFileReaderState> state(new FitFileReaderState(file, errors));
-    return state->run();
+    QSharedPointer<FitFileReaderState> state(new FitFileReaderState(file, errors, rides));
+    auto ret = state->run();
+    return ret;
 }
 
 
