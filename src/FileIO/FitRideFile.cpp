@@ -150,8 +150,20 @@ struct FitFileReaderState
     QList<QString> dataInfos;
     int num_sessions;
 
-    QList<QMap<QString, QVariant>> sessions_;
     QList<QMap<QString, QVariant>> records_;
+    QList<QMap<QString, QVariant>> file_id_;
+    QList<QMap<QString, QVariant>> physio_metrics_;
+    QList<QMap<QString, QVariant>> sessions_;
+    QList<QMap<QString, QVariant>> device_info_;
+    QList<QMap<QString, QVariant>> activity_;
+    //QList<QMap<QString, QVariant>> event_;
+    //QList<QMap<QString, QVariant>> hrv_;
+    //QList<QMap<QString, QVariant>> lap_;
+    //QList<QMap<QString, QVariant>> length_;
+    //QList<QMap<QString, QVariant>> weather_;
+    //QList<QMap<QString, QVariant>> hrv_device_settings_;
+    //QList<QMap<QString, QVariant>> segment_;
+    //QList<QMap<QString, QVariant>> devel_field_desc_;
 
     FitFileReaderState(QFile &file, QStringList &errors, QList<RideFile*> * rides) :
         file(file), errors(errors), rideFiles(rides), rideFile(NULL), start_time(0),
@@ -715,6 +727,7 @@ struct FitFileReaderState
     void decodeFileId(const FitDefinition &def, int,
                       const std::vector<FitValue>& values) {
         int i = 0;
+        QMap<QString, QVariant> id;
         int manu = -1, prod = -1;
         foreach(const FitField &field, def.fields) {
             fit_value_t value = values[i++].v;
@@ -723,21 +736,23 @@ struct FitFileReaderState
                 continue;
 
             switch (field.num) {
-                case 1: manu = value; break;
-                case 2: prod = value; break;
+                case 1: manu = value; id["manufacturer"] = value; break;
+                case 2: prod = value; id["product"] = value; break;
 
                 // other are ignored at present:
                 case 0: // file type:
+                    id["file_type"] = value;
                     // 4:  activity log
                     // 6:  Itinary
                     // 34: segment
                     break;
-                case 3: //serial number
-                case 4: //timestamp
-                case 5: //number
-                default: ; // do nothing
+                case 3: id["serial_number"] = value; break; //serial number
+                case 4: id["timestamp"] = value; break; //timestamp
+                case 5: id["number"] = value; break; //number
+                default: break; // do nothing
             }
         }
+        file_id_.append(id);
         rideFile->setDeviceType(getManuProd(manu, prod));
     }
 
@@ -745,6 +760,7 @@ struct FitFileReaderState
     void decodePhysiologicalMetrics(const FitDefinition &def, int,
                                     const std::vector<FitValue>& values) {
         int i = 0;
+        QMap<QString, QVariant> physio_m;
 
         foreach(const FitField &field, def.fields) {
             fit_value_t value = values[i++].v;
@@ -756,33 +772,40 @@ struct FitFileReaderState
             switch (field.num) {
                 case 7:   // METmax: 1 METmax = VO2max * 3.5, scale 65536
                     rideFile->setTag("VO2max detected", QString::number(round(value / 65536.0 * 3.5 * 10.0) / 10.0));
+                    physio_m["metmax_vo2max"] = round(value / 65536.0 * 3.5 * 10.0) / 10.0;
                     break;
 
                 case 4:   // Aerobic Training Effect, scale 10
                     rideFile->setTag("Aerobic Training Effect", QString::number(value/10.0));
+                    physio_m["aerobic_traiing_effect"] = value/10.0;
                     break;
 
                 case 20:   // Anaerobic Training Effect, scale 10
                     rideFile->setTag("Anaerobic Training Effect", QString::number(value/10.0));
+                    physio_m["anaerobic_training_effect"] = value/10.0;
                     break;
 
                 case 9:   // Recovery Time, minutes
                     rideFile->setTag("Recovery Time", QString::number(round(value/60.0)));
+                    physio_m["recovery_time"] = value/60.0;
                     break;
 
                 case 17:   // Performance Condition
                     rideFile->setTag("Performance Condition", QString::number(value));
+                    physio_m["performance_condition"] = value;
                     break;
 
                 case 14:   // If watch detected Running Lactate Threshold Heart Rate, bpm
                     if(rideFile->isRun() && value > 0){
                         rideFile->setTag("LTHR detected", QString::number(value));
+                        physio_m["lthr"] = value;
                     }
                     break;
 
                 case 15:   // If watch detected Running Lactate Threshold Speed, m/s
                     if(rideFile->isRun() && value > 0){
                         rideFile->setTag("LTS detected", QString::number(value/100.0));
+                        physio_m["lts"] = value/100.0;
                     }
                     break;
 
@@ -795,6 +818,7 @@ struct FitFileReaderState
                 printf("decodePhysiologicalMetrics  field %d: %d bytes, num %d, type %d\n", i, field.size, field.num, field.type );
             }
         }
+        physio_metrics_.append(physio_m);
     }
 
     void decodeSession(const FitDefinition &def, int,
@@ -1109,7 +1133,7 @@ struct FitFileReaderState
         int index=-1;
         int manu = -1, prod = -1, version = -1, type = -1, serial = -1;
         fit_string_value name;
-
+        QMap<QString, QVariant> dev_info;
         QString deviceInfo;
 
         foreach(const FitField &field, def.fields) {
@@ -1120,35 +1144,42 @@ struct FitFileReaderState
             switch (field.num) {
                 case 0:   // device index
                      index = value.v;
+                     dev_info["index"] = value.v;
                      break;
                 case 1:   // ANT+ device type
                      type = value.v;
+                     dev_info["ant_device_type"] = value.v;
                      break;
                       // details: 0x78 = HRM, 0x79 = Spd&Cad, 0x7A = Cad, 0x7B = Speed
                 case 2:   // manufacturer
                      manu = value.v;
+                     dev_info["manufacturer"] = value.v;
                      break;
                 case 3:   // serial number (can be ANT id)
                      serial = value.v;
+                     dev_info["serial_number"] = value.v;
                      break;
                 case 4:   // product
                      prod = value.v;
+                     dev_info["product"] = value.v;
                      break;
                 case 5:   // software version
                      version = value.v;
+                     dev_info["software_version"] = value.v;
                      break;
                 case 27:   // product name
                      name = value.s;
+                     dev_info["product_name"] = value.v;
                  break;
 
                 // all other fields are ignored at present
-                case 253: //timestamp
-                case 10:  // battery voltage
-                case 6:   // hardware version
-                case 11:  // battery status
-                case 22:  // ANT network
-                case 25:  // source type
-                case 24:  // equipment ID
+                case 253: dev_info["timestamp"] = value.v; break; //timestamp
+                case 10:  dev_info["battery_voltage"] = value.v; break; // battery voltage
+                case 6:   dev_info["hardware_version"] = value.v; break; // hardware version
+                case 11:  dev_info["battery_status"] = value.v; break; // battery status
+                case 22:  dev_info["ant_network"] = value.v; break; // ANT network
+                case 25:  dev_info["source_type"] = value.v; break; // source type
+                case 24:  dev_info["equipment_id"] = value.v; break; // equipment ID
                 default: ; // do nothing
             }
 
@@ -1174,11 +1205,13 @@ struct FitFileReaderState
         if (type>-1 && type != 0 && type != 7 && type != 3)
             deviceInfos.insert(index, deviceInfo);
 
+        device_info_.append(dev_info);
     }
 
     void decodeActivity(const FitDefinition &def, int,
                         const std::vector<FitValue>& values) {
         int i = 0;
+        QMap<QString, QVariant> activity;
 
         const int delta = qbase_time.toTime_t();
         int event = -1, event_type = -1, local_timestamp = -1, timestamp = -1;
@@ -1192,15 +1225,18 @@ struct FitFileReaderState
             switch (field.num) {
                 case 3: // event
                     event = value;
+                    activity["event"] = value;
                     break;
                 case 4: // event_type
                     event_type = value;
+                    activity["event_type"] = value;
                     break;
                 case 5: // local_timestamp
                     // adjust from seconds since 1989-12-31 00:00:00 UTC
                     if (0 != value)
                     {
                         local_timestamp = value + delta;
+                        activity["local_timestamp"] = value + delta;
                     }
                     break;
                 case 253: // timestamp
@@ -1208,12 +1244,17 @@ struct FitFileReaderState
                     if (0 != value)
                     {
                         timestamp = value + delta;
+                        activity["timestamp"] = value + delta;
                     }
                     break;
 
                 case 1: // num_sessions
                     num_sessions = value;
+                    activity["num_sessions"] = value;
+                    break;
                 case 2: // type
+                    activity["type"] = value;
+                    break;
                 default:
                     break;
             }
@@ -1221,26 +1262,38 @@ struct FitFileReaderState
             //qDebug() << field.num << value;
         }
 
-        if (event != 26) // activity
+        if (event != 26) { // activity
+            activity_.append(activity);
             return;
+        }
 
-        if (event_type != 1) // stop
+        if (event_type != 1) { // stop
+            activity_.append(activity);
             return;
+        }
 
-        if (local_timestamp < 0 || timestamp < 0)
+        if (local_timestamp < 0 || timestamp < 0) {
+            activity_.append(activity);
             return;
+        }
         
-        if (0 == local_timestamp && 0 == timestamp)
+        if (0 == local_timestamp && 0 == timestamp) {
+            activity_.append(activity);
             return;
+        }
 
         QDateTime t(rideFile->startTime().toUTC());
         if (0 == local_timestamp) {
             // ZWift FIT files are not reporting local timestamp
             rideFile->setStartTime(t.addSecs(timestamp));
+            activity["start_time"] = t.addSecs(timestamp);
         } else {
             // adjust start time to time zone of the ride
             rideFile->setStartTime(t.addSecs(local_timestamp - timestamp));
+            activity["start_time"] = t.addSecs(local_timestamp - timestamp);
         }
+
+        activity_.append(activity);
     }
 
     void decodeEvent(const FitDefinition &def, int,
