@@ -148,6 +148,10 @@ struct FitFileReaderState
     XDataSeries *hrvXdata;
     QMap<int, QString> deviceInfos;
     QList<QString> dataInfos;
+    int num_sessions;
+
+    QList<QMap<QString, QVariant>> sessions_;
+    QList<QMap<QString, QVariant>> records_;
 
     FitFileReaderState(QFile &file, QStringList &errors, QList<RideFile*> * rides) :
         file(file), errors(errors), rideFiles(rides), rideFile(NULL), start_time(0),
@@ -797,6 +801,7 @@ struct FitFileReaderState
                        const std::vector<FitValue>& values) {
         int i = 0;
 	QString WorkOutCode = NULL;
+    QMap<QString, QVariant> session;
 
         foreach(const FitField &field, def.fields) {
             fit_value_t value = values[i++].v;
@@ -875,6 +880,7 @@ struct FitFileReaderState
                             // Garmin Swim send 2 tags for example
                             if (rideFile->getTag("Sport", "Bike") != "Bike") break;
                     }
+                    session["sport"] = rideFile->getTag("Sport", "");
                     break;
                 case 6: // sub sport (ignored at present)
                     switch (value) {
@@ -1008,66 +1014,68 @@ struct FitFileReaderState
 		        default:
 			  break;
                     }
+                    session["sub_sport"] = rideFile->getTag("SubSport", "");
                     break;
                 case 44: // pool_length
                     pool_length = value / 100000.0;
                     rideFile->setTag("Pool Length", // in meters
                                       QString("%1").arg(pool_length*1000.0));
+                    session["pool_length"] = pool_length*1000.0;
                     break;
 
                 // other fields are ignored at present
-                case 253: //timestamp
-                case 254: //index
-                case 0:   //event
-                case 1:    /* event_type */
-                case 2:    /* start_time */
-                case 3:    /* start_position_lat */
-                case 4:    /* start_position_long */
-                case 7:    /* total elapsed time */
-                case 8:    /* total timer time */
-                case 9:    /* total distance */
-                case 10:    /* total_cycles */
-                case 11:    /* total calories */
-                case 13:    /* total fat calories */
-                case 14:    /* avg_speed */
-                case 15:    /* max_speed */
-                case 16:    /* avg_HR */
-                case 17:    /* max_HR */
-                case 18:    /* avg_cad */
-                case 19:    /* max_cad */
-                case 20:    /* avg_pwr */
-                case 21:    /* max_pwr */
-                case 22:    /* total ascent */
-                case 23:    /* total descent */
-                case 25:    /* first lap index */
-                case 26:    /* num lap */
-                case 29:    /* north-east lat = bounding box */
-                case 30:    /* north-east lon = bounding box */
-                case 31:    /* south west lat = bounding box */
-                case 32:    /* south west lon = bounding box */
-                case 34:    /* normalized power */
-                case 48:    /* total work (J) */
-                case 49:    /* avg altitude */
-                case 50:    /* max altitude */
-                case 52:    /* avg grade */
-                case 53:    /* avg positive grade */
-                case 54:    /* avg negative grade */
-                case 55:    /* max pos grade */
-                case 56:    /* max neg grade */
-                case 57:    /* avg temperature (Celsius. deg) */
-                case 58:    /* max temp */
-                case 59:    /* total_moving_time */
-                case 60:    /* avg_pos_vertical_speed (m/s) */
-                case 61:    /* avg_neg_vertical_speed */
-                case 62:    /* max_pos_vertical_speed */
-                case 63:    /* max neg_vertical_speed */
-                case 64:    /* min HR bpm */
-                case 69:    /* avg lap time */
-                case 70:    /* best lap index */
-                case 71:    /* min altitude */
-                case 92:    /* fractional avg cadence (rpm) */
-                case 93:    /* fractional max cadence */
-                default: ; // do nothing
+            case 253: /* timestamp */ session["timestamp"] = value; break;
+            case 254: /* index */ session["index"] = value; break;
+            case 0:   /* event */ session["event"] = value; break;
+            case 1:    /* event_type */ session["event_type"] = value; break;
+            case 2:    /* start_time */ session["start_time"] = value; break;
+            case 3:    /* start_position_lat */ session["start_position_lat"] = value; break;
+            case 4:    /* start_position_long */ session["start_position_long"] = value; break;
+            case 7:    /* total elapsed time */ session["total_elapsed_time"] = value; break;
+            case 8:    /* total timer time */ session["total_timer_time"] = value; break;
+            case 9:    /* total distance */ session["total_distance"] = value; break;
+            case 10:    /* total_cycles */ session["total_cycles"] = value; break;
+            case 11:    /* total calories */ session["total_calories"] = value; break;
+            case 13:    /* total fat calories */ session["total_fat_calories"] = value; break;
+            case 14:    /* avg_speed */ session["avg_speed"] = value; break;
+            case 15:    /* max_speed */ session["max_speed"] = value; break;
+            case 16:    /* avg_HR */ session["avg_HR"] = value; break;
+            case 17:    /* max_HR */ session["max_HR"] = value; break;
+            case 18:    /* avg_cad */ session["avg_cad"] = value; break;
+            case 19:    /* max_cad */ session["max_cad"] = value; break;
+            case 20:    /* avg_pwr */ session["avg_pwr"] = value; break;
+            case 21:    /* max_pwr */ session["max_pwr"] = value; break;
+            case 22:    /* total ascent */ session["total_ascent"] = value; break;
+            case 23:    /* total descent */ session["total_descent"] = value; break;
+            case 25:    /* first lap index */ session["first_lap_index"] = value; break;
+            case 26:    /* num lap */ session[" num lap"] = value; break;
+            case 29:    /* north-east lat = bounding box */ session["north-east_bb_lat"] = value; break;
+            case 30:    /* north-east lon = bounding box */ session["north-east_bb_lon"] = value; break;
+            case 31:    /* south west lat = bounding box */ session["south west_bb_lat"] = value; break;
+            case 32:    /* south west lon = bounding box */ session["south west_bb_lon"] = value; break;
+            case 34:    /* normalized power */ session["normalized_power"] = value; break;
+            case 48:    /* total work (J) */ session["total_work"] = value; break;
+            case 49:    /* avg altitude */ session["avg_altitude"] = value; break;
+            case 50:    /* max altitude */ session["max_altitude"] = value; break;
+            case 52:    /* avg grade */ session["avg_grade"] = value; break;
+            case 53:    /* avg positive grade */ session["avg_positive_grade"] = value; break;
+            case 54:    /* avg negative grade */ session["avg_negative_grade"] = value; break;
+            case 55:    /* max pos grade */ session["max_pos_grade"] = value; break;
+            case 56:    /* max neg grade */ session["max_neg_grade"] = value; break;
+            case 57:    /* avg temperature (Celsius. deg) */ session["avg_temperature"] = value; break;
+            case 58:    /* max temp */ session["max_temp"] = value; break;
+            case 59:    /* total_moving_time */ session["total_moving_time"] = value; break;
+            case 60:    /* avg_pos_vertical_speed (m/s) */ session["avg_pos_vertical_speed"] = value; break;
+            case 61:    /* avg_neg_vertical_speed */ session["avg_neg_vertical_speed"] = value; break;
+            case 62:    /* max_pos_vertical_speed */ session["max_pos_vertical_speed"] = value; break;
+            case 63:    /* max neg_vertical_speed */ session["max neg_vertical_speed"] = value; break;
+            case 64:    /* min HR bpm */ session["min_HR_bpm"] = value; break;
+            case 69:    /* avg lap time */ session["avg_lap_time"] = value; break;
+            case 70:    /* best lap index */ session["best_lap_index"] = value; break;
+            case 71:    /* min altitude */ session["min_altitude"] = value; break;
+            case 92:    /* fractional avg cadence (rpm) */ session["fractional_avg_cadence"] = value; break;
+            case 93:    /* fractional max cadence */ session["fractional_max_cadence"] = value; break;
+            default: ; // do nothing
             }
 
             if (FIT_DEBUG && FIT_DEBUG_LEVEL>1) {
@@ -1075,6 +1083,9 @@ struct FitFileReaderState
             }
         }
         rideFile->setTag("Workout Code",WorkOutCode);
+
+        sessions_.append(session);
+#if 0
         if (rideFiles) {
             auto devType = rideFile->deviceType();
             QFileInfo fileInfo(file.fileName());
@@ -1088,6 +1099,7 @@ struct FitFileReaderState
             reset_ride_file_vars();
             rideFile->setDeviceType(devType);
         }
+#endif
     }
 
     void decodeDeviceInfo(const FitDefinition &def, int,
@@ -1200,6 +1212,7 @@ struct FitFileReaderState
                     break;
 
                 case 1: // num_sessions
+                    num_sessions = value;
                 case 2: // type
                 default:
                     break;
@@ -1536,6 +1549,8 @@ struct FitFileReaderState
                       const std::vector<FitValue>& values) {
         if (isLapSwim) return; // We use the length message for Lap Swimming
 
+        QMap<QString, QVariant> rec;
+
         time_t time = 0;
         if (time_offset == 0) // Damien : I have to confirm this...
             last_reference_time = last_time;
@@ -1667,19 +1682,23 @@ struct FitFileReaderState
                             slope = value / 100.0;
                             break;
                     case 10: //resistance = value;
+                            rec["resistance"] = value;
                              break;
                     case 11: //time_from_course = value / 1000.0;
+                            rec["time_from_course"] = value / 1000.0;
                              break;
-                    case 12: break; // "cycle_length"
+                    case 12: rec["cycle_length"] = value; break; // "cycle_length"
                     case 13: // TEMPERATURE
                              temperature = value;
                              break;
                     case 29: // ACCUMULATED_POWER
+                            rec["accumulated_power"] = value;
                              break;
                     case 30: //LEFT_RIGHT_BALANCE
                              lrbalance = (value & 0x80 ? 100 - (value & 0x7F) : value & 0x7F);
                              break;
                     case 31: // GPS Accuracy
+                            rec["gps_accuracy"] = value;
                              break;
 
                     case 39: // VERTICAL OSCILLATION
@@ -1701,6 +1720,7 @@ struct FitFileReaderState
                              break;
 
                     case 42: // ACTIVITY_TYPE
+                            rec["activity_type"] = value;
                              native_num = -1;
                              break;
 
@@ -1796,12 +1816,14 @@ struct FitFileReaderState
                              }
                              break;
                     case 83: // VERTICAL_RATIO
+                            rec["vertical_ratio"] = value;
                              native_num = -1;
                              break;
                     case 84: // Left right balance
                              lrbalance = value/100.0;
                              break;
                     case 85: // STEP_LENGTH
+                            rec["step_length"] = value;
                              native_num = -1;
                              break;
 
@@ -1809,6 +1831,7 @@ struct FitFileReaderState
                              break;
 
                     case 90: // PERFORMANCE_CONDITION
+                            rec["performance_condition"] = value;
                              native_num = -1;
                              break;
 
@@ -2061,6 +2084,46 @@ struct FitFileReaderState
             p_extra->secs = secs;
             extraXdata->datapoints.append(p_extra);
         }
+
+        rec["time"] = static_cast<double>(time);
+        rec["secs"] = secs;
+        rec["cad"] = cad;
+        rec["hr"] = hr;
+        rec["km"] = km;
+        rec["kph"] = kph;
+        rec["nm"] = nm;
+        rec["watts"] = watts;
+        rec["alt"] = alt;
+        rec["lng"] = lng;
+        rec["lat"] = lat;
+        rec["headwind"] = headwind;
+        rec["slope"] = slope;
+        rec["temperature"] = temperature;
+        rec["lrbalance"] = lrbalance;
+        rec["leftTorqueEff"] = leftTorqueEff;
+        rec["rightTorqueEff"] = rightTorqueEff;
+        rec["leftPedalSmooth"] = leftPedalSmooth;
+        rec["rightPedalSmooth"] = rightPedalSmooth;
+        rec["leftPedalCenterOffset"] = leftPedalCenterOffset;
+        rec["rightPedalCenterOffset"] = rightPedalCenterOffset;
+        rec["leftTopDeathCenter"] = leftTopDeathCenter;
+        rec["rightTopDeathCenter"] = rightTopDeathCenter;
+        rec["leftBottomDeathCenter"] = leftBottomDeathCenter;
+        rec["rightBottomDeathCenter"] = rightBottomDeathCenter;
+        rec["leftTopPeakPowerPhase"] = leftTopPeakPowerPhase;
+        rec["rightTopPeakPowerPhase"] = rightTopPeakPowerPhase;
+        rec["leftBottomPeakPowerPhase"] = leftBottomPeakPowerPhase;
+        rec["rightBottomPeakPowerPhase"] = rightBottomPeakPowerPhase;
+        rec["smO2"] = smO2;
+        rec["tHb"] = tHb;
+        rec["rvert"] = rvert;
+        rec["rcad"] = rcad;
+        rec["rcontact"] = rcontact;
+        rec["0.0"] = 0.0;
+        rec["interval"] = interval;
+        rec["false"] = false;
+
+        records_.append(rec);
     }
 
     void decodeLength(const FitDefinition &def, int time_offset,
